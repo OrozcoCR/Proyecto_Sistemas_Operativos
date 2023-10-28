@@ -30,15 +30,8 @@ def detect_faces(path):
         print(f"surprise: {likelihood_name[face.surprise_likelihood]}")
         print(f"sorrow: {likelihood_name[face.sorrow_likelihood]}")
 
-
-
-
-
-
     if response.error.message:
         raise Exception(
             "{}\nFor more info on error messages, check: "
             "https://cloud.google.com/apis/design/errors".format(response.error.message)
         )
-detect_faces("F:\II semestre 2023\SOII\yo.jpg")
-
