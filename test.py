@@ -1,26 +1,20 @@
 import cv2
+import os
 from google.cloud import vision
 import threading
-import time
+
+dataPath = './DATA'
+imagePath = os.listdir(dataPath)
+print('imgPath', imagePath)
+
+face_recognizer = cv2.face_LBPHFaceRecognizer.create()
+face_recognizer.read('ModeloFaceFrontalData.xml')
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+faceClassif = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 
 # Initialize the Google Cloud Vision client
 client = vision.ImageAnnotatorClient()
-
-# Load the cascade classifier for face detection
-face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-
-# Initialize the camera
-cap = cv2.VideoCapture(0)
-
-# Define the names for emotion likelihoods
-likelihood_name = (
-    "UNKNOWN",
-    "VERY_UNLIKELY",
-    "UNLIKELY",
-    "POSSIBLE",
-    "LIKELY",
-    "VERY_LIKELY",
-)
 
 # List to store face images for emotion detection
 face_images = []
@@ -33,10 +27,10 @@ def detect_emotions(face_img):
 
     # Print the detected emotions
     for face in faces:
-        print(f"Emotion in the face: {likelihood_name[face.anger_likelihood]}")
-        print(f"Happiness: {likelihood_name[face.joy_likelihood]}")
-        print(f"Surprise: {likelihood_name[face.surprise_likelihood]}")
-        print(f"Sorrow: {likelihood_name[face.sorrow_likelihood]}")
+        print(f"Emotion in the face: {face.anger_likelihood.name}")
+        print(f"Happiness: {face.joy_likelihood.name}")
+        print(f"Surprise: {face.surprise_likelihood.name}")
+        print(f"Sorrow: {face.sorrow_likelihood.name}")
 
 # Thread for emotion detection
 def emotion_detection_thread():
@@ -50,45 +44,40 @@ emotion_thread = threading.Thread(target=emotion_detection_thread)
 emotion_thread.daemon = True
 emotion_thread.start()
 
-# Initialize variables for face capture and emotion detection
-last_detection_time = time.time()
-detection_interval = 1  # Emotion detection every 1 second
-
 while True:
-    _, img = cap.read()
+    ret, frame = cap.read()
+    if ret == False:
+        break
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    auxFrame = gray.copy()
 
-    # Convert the image to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detect faces in the image
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    faces = faceClassif.detectMultiScale(gray, 1.1, 4)
 
     for (x, y, w, h) in faces:
-        # Draw a rectangle around the detected face
-        cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        rostro = auxFrame[y:y + h, x:x + w]
+        rostro = cv2.resize(rostro, (150, 150), interpolation=cv2.INTER_CUBIC)
+        result = face_recognizer.predict(rostro)
+        cv2.putText(frame, '{}'.format(result), (x, y - 5), 1, 1.3, (255, 255, 0), 1, cv2.LINE_AA)
 
-        # Capture the face region
-        face_img = img[y:y + h, x:x + w]
+        if result[1] < 85:
+            cv2.putText(frame, '{}'.format(imagePath[result[0]]), (x, y - 25), 2, 1.1, (0, 255, 0), 0, cv2.LINE_AA)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        # Convert the face region to binary format
-        _, buffer = cv2.imencode('.jpg', face_img)
-        face_content = buffer.tobytes()
+            # Capture the face region for emotion detection
+            face_img = frame[y:y + h, x:x + w]
+            _, buffer = cv2.imencode('.jpg', face_img)
+            face_content = buffer.tobytes()
 
-        # Add the face image to the queue for emotion detection
-        face_images.append(face_content)
+            # Add the face image to the queue for emotion detection
+            face_images.append(face_content)
+        else:
+            cv2.putText(frame, 'Desconocido', (x, y - 20), 2, 0.8, (0, 0, 255), 1, cv2.LINE_AA)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-    # Show the image with detected faces
-    cv2.imshow('img', img)
-
-    # Check for emotion detection every second
-    current_time = time.time()
-    if current_time - last_detection_time >= detection_interval:
-        last_detection_time = current_time
-
-    # Wait for the 'ESC' key to exit
-    k = cv2.waitKey(30) & 0xff
+    cv2.imshow('frame', frame)
+    k = cv2.waitKey(1)
     if k == 27:
         break
 
-# Release the camera
 cap.release()
+cv2.destroyAllWindows()
