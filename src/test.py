@@ -3,39 +3,57 @@ import os
 import threading
 from google.cloud import vision
 import tkinter as tk
-from tkinter import Button, Label
+from tkinter import Button, Label, filedialog
 from PIL import Image, ImageTk
+import json
 
 classifier_path = ""
 dataPath = os.path.join(os.path.dirname(__file__), "..", "DATA")
 imagePath = os.listdir(dataPath)
 print("imgPath", imagePath)
 camera_label = None
+data = []
+
+event = threading.Event()
 
 
 def detect_emotions(face_img):
+    global data
     image = vision.Image(content=face_img)
     response = client.face_detection(image=image)
     faces = response.face_annotations
 
     for face in faces:
+        emotionSet = {
+            "anger": face.anger_likelihood,
+            "joy": face.joy_likelihood,
+            "surprise": face.surprise_likelihood,
+            "sorrow": face.sorrow_likelihood,
+        }
         print(f"Anger: {face.anger_likelihood.name}")
         print(f"Joy: {face.joy_likelihood.name}")
         print(f"Surprise: {face.surprise_likelihood.name}")
         print(f"Sorrow: {face.sorrow_likelihood.name}")
         print("\n")
+        data.append(emotionSet)
 
-
-def emotion_detection_thread():
+def emotion_detection_thread(event: threading.Event):
     while True:
+        if event.is_set():
+            print('The thread was stopped prematurely.')
+            break
         if len(face_images) > 0:
             face_img = face_images.pop(0)
             detect_emotions(face_img)
 
 
-def stop_camera_feed(cap):
+def stop_camera_feed(cap, path, data):
     cap.release()
     cv2.destroyAllWindows()
+    event.set()
+    print('stop')
+    with open(os.path.join(path, 'data.json'), 'w') as file:
+        json.dump(data, file)
 
 
 def update_camera_feed():
@@ -70,8 +88,30 @@ def start_camera_feed():
     update_camera_feed()
 
 
-def main():
-    global cap, faceClassif, client, face_images, window_width, window_height, root, camera_label
+def mostrar_porcentajes():
+    file_path = filedialog.askopenfilename(title="Seleccionar archivo JSON", filetypes=[("Archivos JSON", "*.json")])
+    # Leer datos desde el archivo JSON
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+
+    totals = [sum(emotions.values()) for emotions in data]
+
+    # Calcular los porcentajes para cada emoción en cada registro
+    percentages = [{emotion: count / total * 100 for emotion, count in emotions.items()} for emotions, total in zip(data, totals)]
+
+    # Calcular el promedio de los porcentajes para cada emoción
+    average_percentages = {emotion: sum(p[emotion] for p in percentages) / len(percentages) for emotion in data[0]}
+
+    # Imprimir los resultados
+    print("Porcentajes promedio:")
+    for emotion, percentage in average_percentages.items():
+        print(f"{emotion}: {percentage:.2f}%")
+
+
+def emotionsMain(path):
+    global cap, faceClassif, client, face_images, window_width, window_height, root, camera_label, data, emotion_detection_thread, emotion_thread
+    
+    print(path)
     face_recognizer = cv2.face_LBPHFaceRecognizer.create()
     classifier_path = os.path.join(
         os.path.dirname(__file__), "../models/haarcascade_frontalface_default.xml"
@@ -90,7 +130,7 @@ def main():
     root.title("Emotions")
 
     stop_button = Button(
-        root, text="Stop Camera", command=lambda: stop_camera_feed(cap)
+        root, text="Generar reporte", command=lambda: stop_camera_feed(cap, path, data)
     )
     start_button = Button(root, text="Start Camera", command=start_camera_feed)
     exit_button = Button(root, text="Exit", command=root.destroy)
@@ -108,7 +148,7 @@ def main():
     root.geometry(f"{window_width}x{window_height}+{x}+{y}")
     root.state("zoomed")
 
-    emotion_thread = threading.Thread(target=emotion_detection_thread)
+    emotion_thread = threading.Thread(target=emotion_detection_thread, args=(event,))
     emotion_thread.daemon = True
     emotion_thread.start()
 
@@ -116,4 +156,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    emotionsMain()

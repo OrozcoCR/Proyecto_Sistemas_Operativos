@@ -30,6 +30,7 @@ def test():
         faces = faceClassif.detectMultiScale(gray, 1.3, 4)
 
         recognized = False  # Flag to track if recognition occurs
+        name = None
 
         for x, y, w, h in faces:
             rostro = auxFrame[y : y + h, x : x + w]
@@ -47,6 +48,7 @@ def test():
             )
 
             if result[1] < 84:
+                name = imagePath[result[0]]
                 cv2.putText(
                     frame,
                     "{}".format(imagePath[result[0]]),
@@ -93,4 +95,5 @@ def test():
     cap.release()
     cv2.destroyAllWindows()
     print(recognized)
-    return recognized  # Return True if recognized for 3 seconds, otherwise False
+    print(name)
+    return name  # Return True if recognized for 3 seconds, otherwise False

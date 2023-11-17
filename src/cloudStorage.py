@@ -35,7 +35,7 @@ def download_entire_bucket():
 
 def upload_folder_contents():
     # Can change depending on data path
-    directory_path = path.join(PWD_PATH, "images")
+    directory_path = path.join(PWD_PATH, '..', "DATA")
 
     if not (path.exists(directory_path)):
         raise NotADirectoryError(f"Not directory '{directory_path}' to upload")
